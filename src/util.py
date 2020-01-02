@@ -6,7 +6,11 @@ from PIL import Image
 
 import numpy as np
 
+from scipy.optimize import brentq
+from scipy.interpolate import interp1d
+
 from sklearn.utils import shuffle
+from sklearn.metrics import roc_curve
 
 import torch
 from torch.utils.data import Dataset
@@ -41,10 +45,11 @@ class ImageDataset(Dataset):
 
         return img, target
 
-def collate_fn_multi(data_batch):
+def collate_fn(data_batch):
     data = [tup[0].unsqueeze(0) for tup in data_batch]
     labels = [tup[1] for tup in data_batch]
     data = torch.cat(data)
+    labels = torch.LongTensor(labels)
     return data, labels
 
 ##
@@ -130,6 +135,13 @@ class MetricBatchSampler(BatchSampler):
         
         raise StopIteration
 
+def calculate_eer(y, y_score):
+    fpr, tpr, threshold = roc_curve(y, y_score)
+
+    eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+    thresh = interp1d(fpr, threshold)(eer)
+
+    return eer, thresh
 
 if __name__=="__main__":
     from torch.utils.data import DataLoader
