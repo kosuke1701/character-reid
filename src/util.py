@@ -99,11 +99,10 @@ class MetricBatchSampler(BatchSampler):
         self.n_max_per_char = n_max_per_char
         self.n_batch_size = n_batch_size
         self.n_random = n_random
+
+        self.batches = []
     
-    def __len__(self):
-        return 1000000000
-    
-    def __iter__(self):
+    def create_batches(self):
         segments = []
         for i_char, lst_data_idx in self.char_idx.items():
             lst_data_idx = shuffle(lst_data_idx)
@@ -114,6 +113,7 @@ class MetricBatchSampler(BatchSampler):
                     segments.append(new_seg)
         segments = shuffle(segments)
 
+        self.batches = []
         while True:
             batch = []
 
@@ -131,9 +131,21 @@ class MetricBatchSampler(BatchSampler):
             for i in range(self.n_random):
                 batch.append(np.random.randint(self.n_data))
             
+            self.batches.append(batch)
+    
+    def __len__(self):
+        if len(self.batches) == 0:
+            self.create_batches()
+        return len(self.batches)
+    
+    def __iter__(self):
+        if len(self.batches) == 0:
+            self.create_batches()
+
+        for i_batch, batch in enumerate(self.batches):
+            if i_batch == len(self.batches) - 1:
+                self.batches = []
             yield batch
-        
-        raise StopIteration
 
 def calculate_eer(y, y_score):
     fpr, tpr, threshold = roc_curve(y, y_score)
