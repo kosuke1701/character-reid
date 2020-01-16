@@ -45,6 +45,7 @@ def train_epoch(args, model, optimizer, dataloader):
     loss_func = losses.TripletMarginLoss(
         margin=args.margin, normalize_embeddings=args.normalize
     )
+    miner = BatchHardMiner(normalize_embeddings=True, use_similarity=True)
 
     model.train()
 
@@ -60,7 +61,8 @@ def train_epoch(args, model, optimizer, dataloader):
         batch_label = batch_label.to(device)
 
         embeddings = model(batch_img)
-        loss = loss_func(embeddings, batch_label)
+        miner_output = miner(embeddings, batch_label)
+        loss = loss_func(embeddings, batch_label, miner_output)
         lst_loss.append(loss.item())
 
         loss.backward()
