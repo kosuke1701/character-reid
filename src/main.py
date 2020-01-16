@@ -66,8 +66,6 @@ def train_epoch(args, model, optimizer, dataloader):
         loss.backward()
         optimizer.step()
 
-        break
-
     return np.mean(lst_loss)
 
 def evaluate(args, model, dataloaders):
@@ -239,6 +237,7 @@ if __name__=="__main__":
 
     group = parser.add_argument_group("System arguments")
     group.add_argument("--gpu", type=int, default=-1)
+    group.add_argument("--suffix", type=str, default="tmp")
 
 
     args = parser.parse_args()
@@ -247,7 +246,7 @@ if __name__=="__main__":
 
     logger = logging.getLogger("main")
     logger.setLevel(logging.INFO)
-    logger.addHandler(logging.FileHandler("log/{}.log".format(exp_label)))
+    logger.addHandler(logging.FileHandler("log/{}.log".format(args.suffix)))
     logger.addHandler(logging.StreamHandler(sys.stdout))
 
     logger.info(str(args))
@@ -261,3 +260,5 @@ if __name__=="__main__":
     best_eval = train_eval(args, sum(data[0:2],[]), data[3])
 
     logger.info(f"Best evaluation result: {best_eval}")
+    with open("_tmp.log", "a") as h:
+        h.write("{}\t{}\t{}\n".format(best_eval, args.suffix, args))
