@@ -42,10 +42,19 @@ def prepare_evaluation_dataloaders(args, n_split, data, trans):
 
 def train_epoch(args, model, optimizer, dataloader):
     device = next(model.parameters()).device
+
     loss_func = losses.TripletMarginLoss(
         margin=args.margin, normalize_embeddings=args.normalize
     )
-    miner = BatchHardMiner(normalize_embeddings=True, use_similarity=True)
+
+    if args.miner == "none":
+        miner = None
+    elif args.miner == "batch-hard":
+        miner = BatchHardMiner(normalize_embeddings=True, use_similarity=True)
+    elif args.miner == "triplet-margin":
+        miner = TripletMarginLoss(margin=args.margin, normalize_embeddings=True,
+            type_of_triplets=args.type_of_triplets)
+
 
     model.train()
 
@@ -61,8 +70,11 @@ def train_epoch(args, model, optimizer, dataloader):
         batch_label = batch_label.to(device)
 
         embeddings = model(batch_img)
-        miner_output = miner(embeddings, batch_label)
-        loss = loss_func(embeddings, batch_label, miner_output)
+        if miner is not None:
+            miner_output = miner(embeddings, batch_label)
+            loss = loss_func(embeddings, batch_label, miner_output)
+        else:
+            loss = loss_func(embeddings, batch_label)
         lst_loss.append(loss.item())
 
         loss.backward()
@@ -221,7 +233,13 @@ if __name__=="__main__":
     group = parser.add_argument_group("Model arguments")
     group.add_argument("--emb-dim", type=int, default=500)
     group.add_argument("--normalize", action="store_true")
+
     group.add_argument("--margin", type=float, default=0.1)
+
+    group.add_argument("--miner", type=str,
+        choices=["none", "batch-hard", "triplet-margin"])
+    group.add_argument("--type-of-triplets", type=str,
+        choices=["all", "hard", "semihard"])
 
     group = parser.add_argument_group("Training arguments")
     group.add_argument("--epoch", type=int, default=100)
