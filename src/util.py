@@ -1,6 +1,9 @@
 from collections import defaultdict
 import glob
 import json
+import logging
+import sys
+import time
 
 from PIL import Image
 
@@ -13,8 +16,12 @@ from sklearn.utils import shuffle
 from sklearn.metrics import roc_curve
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import BatchSampler
+
+#
+# Dataset
+#
 
 def _load_image(filename):
     try:
@@ -35,12 +42,12 @@ class ImageDataset(Dataset):
 
     def __len__(self):
         return len(self.lst_img_fn)
-    
+
     def __getitem__(self, idx):
         img = _load_image(self.lst_img_fn[idx])
         if self.transform is not None:
             img = self.transform(img)
-        
+
         target = self.lst_label[idx]
 
         return img, target
@@ -65,7 +72,7 @@ def _create_index_image_map(root):
         idx = int(idx)
 
         idx_img_map[idx] = img_fn
-    
+
     return idx_img_map
 
 def create_dataset(root, data, transform):
@@ -86,12 +93,22 @@ def create_dataset(root, data, transform):
             lst_label.append(i_char)
 
             char_idx[i_char].append(data_idx)
-    
+
     dataset = ImageDataset(lst_fn, lst_label, transform)
 
     return dataset, char_idx
 
+#
+# Sampler
+#
+
 class MetricBatchSampler(BatchSampler):
+    u"""
+    MetricBatchSampler samples a set of images from sampled few labels.
+    Single batch contains at most n_max_per_char images for a single label.
+    The sampler samples images until batch size exceeds n_batch_size.
+    Also, it randomly appends n_random images from a dataset to each batch.
+    """
     def __init__(self, dataset, char_idx, n_max_per_char, n_batch_size, n_random):
         self.char_idx = char_idx
         self.n_data = len(dataset)
@@ -101,7 +118,7 @@ class MetricBatchSampler(BatchSampler):
         self.n_random = n_random
 
         self.batches = []
-    
+
     def create_batches(self):
         segments = []
         for i_char, lst_data_idx in self.char_idx.items():
@@ -130,22 +147,27 @@ class MetricBatchSampler(BatchSampler):
             # Negative data
             for i in range(self.n_random):
                 batch.append(np.random.randint(self.n_data))
-            
+
             self.batches.append(batch)
-    
+
     def __len__(self):
         if len(self.batches) == 0:
             self.create_batches()
         return len(self.batches)
-    
+
     def __iter__(self):
         if len(self.batches) == 0:
             self.create_batches()
 
         for i_batch, batch in enumerate(self.batches):
+            #print(i_batch)
             if i_batch == len(self.batches) - 1:
                 self.batches = []
             yield batch
+
+#
+# Evaluation utilities.
+#
 
 def calculate_eer(y, y_score):
     fpr, tpr, threshold = roc_curve(y, y_score)
@@ -154,6 +176,107 @@ def calculate_eer(y, y_score):
     thresh = interp1d(fpr, threshold)(eer)
 
     return eer, thresh
+
+def prepare_evaluation_dataloaders(args, n_split, data, trans):
+    logger = logging.getLogger("main")
+
+    # Split characters in evaluation data into multiple set.
+    _time_start_dataloaders = time.time()
+
+    dataloaders = []
+    for i in range(n_split):
+        dataset, dev_char_idx = \
+            create_dataset(args.root, data[i::n_split], trans)
+        dataloader = DataLoader(
+            dataset, batch_size=100,
+            collate_fn = collate_fn, shuffle=False
+        )
+        dataloaders.append(dataloader)
+
+    _time_end_dataloaders = time.time()
+    logger.info("Preparing dataloaders took {:.2f} seconds.".format(
+        _time_end_dataloaders - _time_start_dataloaders
+    ))
+
+    return dataloaders
+
+def cos_similarity(emb1, emb2):
+    emb1 = emb1 / torch.norm(emb1, dim=2, keepdim=True)
+    emb2 = emb1 / torch.norm(emb2, dim=2, keepdim=True)
+
+    sim = torch.sum(emb1 * emb2, dim=2)
+    return sim
+
+def evaluate(args, trunk, model, dataloaders, sim_func):
+    u"""
+    Arguments:
+        dataloaders (list) -- list of dataloaders with no sampler.
+    """
+    logger = logging.getLogger("main")
+
+    device = next(model.parameters()).device
+
+    model.eval()
+    trunk.eval()
+
+    lst_eer = []
+    n_loader = len(dataloaders)
+    for i_loader, dataloader in enumerate(dataloaders):
+        logger.info(f"Dataloader {i_loader}/{n_loader}")
+        _time_start_eval = time.time()
+
+        with torch.no_grad():
+            embeddings = []
+            labels = []
+
+            print("Computing embeddings...")
+            n_batch = len(dataloader)
+            for i_batch, (batch_img, batch_label) in enumerate(dataloader):
+                sys.stdout.write(f"{i_batch}/{n_batch}\r")
+                sys.stdout.flush()
+
+                batch_img = batch_img.to(device)
+                embs = model(trunk(batch_img))
+
+                if args.normalize:
+                    embs = embs / embs.norm(dim=1, keepdim=True)
+
+                embeddings.append(embs)
+                labels += batch_label.tolist()
+
+            print("Computing similarity scores...")
+            results = []
+            for i in range(len(embeddings)):
+                sys.stdout.write("{}/{}\r".format(i, len(embeddings)))
+                sys.stdout.flush()
+
+                tmp = []
+                for j in range(len(embeddings)):
+                    sim = sim_func(
+                        embeddings[i].unsqueeze(1),
+                        embeddings[j].unsqueeze(0)
+                    )
+                    tmp.append(sim)
+
+                row = np.array(torch.cat(tmp, dim=1).tolist(), dtype=np.float32)
+                results.append(row)
+        results = np.concatenate(results, axis=0)
+
+        labels = np.array(labels, dtype=np.int8)
+        labels = np.equal(labels[:,np.newaxis], labels[np.newaxis,:])
+        labels = labels.astype(dtype=np.int8)
+
+        print("Computing EER...")
+        eer, _ = calculate_eer(labels.flatten(), results.flatten())
+        lst_eer.append(eer)
+        logger.info(f"Dataloader EER:\t{eer}")
+
+        _time_end_eval = time.time()
+        logger.info("Computing EER took {:.2f} seconds".format(
+            _time_end_eval - _time_start_eval
+        ))
+
+    return np.mean(lst_eer), np.std(lst_eer)
 
 if __name__=="__main__":
     from torch.utils.data import DataLoader
@@ -202,4 +325,3 @@ if __name__=="__main__":
 
     print(images.size())
     imshow(make_grid(images, nrow=3))
-
