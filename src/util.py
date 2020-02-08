@@ -200,24 +200,13 @@ def prepare_evaluation_dataloaders(args, n_split, data, trans):
 
     return dataloaders
 
-def cos_similarity(emb1, emb2):
-    emb1 = emb1 / torch.norm(emb1, dim=2, keepdim=True)
-    emb2 = emb1 / torch.norm(emb2, dim=2, keepdim=True)
-
-    sim = torch.sum(emb1 * emb2, dim=2)
-    return sim
-
-def evaluate(args, trunk, model, dataloaders, sim_func):
-    u"""
-    Arguments:
-        dataloaders (list) -- list of dataloaders with no sampler.
-    """
+def evaluate(args, trunk, embedder, dataloaders):
     logger = logging.getLogger("main")
 
-    device = next(model.parameters()).device
+    device = next(trunk.parameters()).device
 
-    model.eval()
     trunk.eval()
+    embedder.eval()
 
     lst_eer = []
     n_loader = len(dataloaders)
@@ -236,7 +225,7 @@ def evaluate(args, trunk, model, dataloaders, sim_func):
                 sys.stdout.flush()
 
                 batch_img = batch_img.to(device)
-                embs = model(trunk(batch_img))
+                embs = embedder(trunk(batch_img))
 
                 if args.normalize:
                     embs = embs / embs.norm(dim=1, keepdim=True)
@@ -252,9 +241,10 @@ def evaluate(args, trunk, model, dataloaders, sim_func):
 
                 tmp = []
                 for j in range(len(embeddings)):
-                    sim = sim_func(
-                        embeddings[i].unsqueeze(1),
-                        embeddings[j].unsqueeze(0)
+                    sim = torch.sum(
+                        embeddings[i].unsqueeze(1) * \
+                        embeddings[j].unsqueeze(0),
+                        dim = 2
                     )
                     tmp.append(sim)
 

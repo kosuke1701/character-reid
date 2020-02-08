@@ -17,7 +17,7 @@ from pytorch_metric_learning import losses, miners, trainers
 import pytorch_metric_learning.utils.common_functions
 
 from util import create_dataset, MetricBatchSampler, collate_fn, \
-    evaluate, prepare_evaluation_dataloaders, cos_similarity
+    prepare_evaluation_dataloaders, evaluate
 from model import Identity, Normalize
 
 # Override library function to use batch_sampler
@@ -31,20 +31,6 @@ def get_train_dataloader(dataset, batch_size, sampler, num_workers, collate_fn):
         pin_memory=False
     )
 pytorch_metric_learning.utils.common_functions.get_train_dataloader = get_train_dataloader
-
-class MetricLossOnly(trainers.BaseTrainer):
-    def calculate_loss(self, curr_batch):
-        data, labels = curr_batch
-        embeddings = self.compute_embeddings(data)
-        indices_tuple = self.maybe_mine_embeddings(embeddings, labels)
-        self.losses["metric_loss"] = self.maybe_get_metric_loss(embeddings, labels, indices_tuple)
-
-    def maybe_get_metric_loss(self, embeddings, labels, indices_tuple):
-        if self.loss_weights.get("metric_loss", 0) > 0:
-            return self.loss_funcs["metric_loss"](embeddings, labels, indices_tuple)
-        return 0
-    
-trainers.MetricLossOnly = MetricLossOnly
 
 def train_eval(args, train_data, dev_data):
     logger = logging.getLogger("main")
@@ -123,11 +109,11 @@ def train_eval(args, train_data, dev_data):
         if i_epoch % args.eval_freq == 0:
             train_eer, train_eer_std = evaluate(
                 args, trainer.models["trunk"], trainer.models["embedder"],
-                eval_train_dataloaders, cos_similarity
+                eval_train_dataloaders
             )
             dev_eer, dev_eer_std = evaluate(
                 args, trainer.models["trunk"], trainer.models["embedder"],
-                eval_dev_dataloaders, cos_similarity
+                eval_dev_dataloaders
             )
             logger.info("Eval EER (mean, std):\t{}\t{}".format(train_eer, train_eer_std))
             logger.info("Eval EER (mean, std):\t{}\t{}".format(dev_eer, dev_eer_std))
@@ -156,8 +142,11 @@ def train_eval(args, train_data, dev_data):
         end_of_epoch_hook = end_of_epoch_hook,
         dataloader_num_workers=1
     )
-    print(trainer.freeze_trunk_batchnorm)
+
     trainer.train(num_epochs=args.epoch)
+
+    if args.save_model:
+        torch.save(trainer.models, f"model/{args.suffix}.mdl")
 
     return best_dev_eer
 
@@ -196,6 +185,7 @@ if __name__=="__main__":
     group = parser.add_argument_group("System arguments")
     group.add_argument("--gpu", type=int, default=-1)
     group.add_argument("--suffix", type=str, default="tmp")
+    group.add_argument("--save-model", action="store_true")
 
 
     args = parser.parse_args()
