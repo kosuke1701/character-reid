@@ -59,6 +59,33 @@ def collate_fn(data_batch):
     labels = torch.LongTensor(labels)
     return data, labels
 
+
+class PairDataset(Dataset):
+    def __init__(self, dataset, lst_pairs, pair_labels):
+        self.dataset = dataset
+        self.pairs = lst_pairs
+        self.labels = pair_labels
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, idx):
+        idx1, idx2 = self.pairs[idx]
+        label = self.labels[idx]
+
+        data1, _ = self.dataset[idx1]
+        data2, _ = self.dataset[idx2]
+
+        return data1, data2, label
+
+    @classmethod
+    def collate_fn(cls, data_batch):
+        data1 = torch.cat([tup[0].unsqueeze(0) for tup in data_batch])
+        data2 = torch.cat([tup[1].unsqueeze(0) for tup in data_batch])
+        labels = torch.LongTensor([tup[2] for tup in data_batch])
+
+        return data1, data2, labels
+
 ##
 ## For re-identification dataset
 ##
@@ -175,7 +202,7 @@ def calculate_eer(y, y_score):
     eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
     thresh = interp1d(fpr, threshold)(eer)
 
-    return eer, thresh
+    return eer, (fpr, tpr, threshold, thresh)
 
 def prepare_evaluation_dataloaders(args, n_split, data, trans):
     logger = logging.getLogger("main")
