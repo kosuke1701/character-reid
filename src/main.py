@@ -76,6 +76,7 @@ def train_eval(args, train_data, dev_data):
     trunk.to(device)
 
     model = nn.Sequential(
+        nn.Dropout(p=args.dropout) if args.dropout > 0.0 else Identity(),
         nn.Linear(trunk_output_size, args.emb_dim),
         Normalize()
     )
@@ -160,6 +161,7 @@ if __name__=="__main__":
     group = parser.add_argument_group("Model arguments")
     group.add_argument("--emb-dim", type=int, default=500)
     group.add_argument("--normalize", action="store_true")
+    group.add_argument("--dropout", type=float, default=0.0)
 
     group.add_argument("--margin", type=float, default=0.1)
 
