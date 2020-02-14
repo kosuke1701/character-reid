@@ -100,6 +100,17 @@ def train_eval(args, train_data, dev_data):
         margin=args.margin, normalize_embeddings=args.normalize
     )
 
+    def lr_func(step):
+        if step < args.warmup:
+            return (step + 1) / args.warmup
+        else:
+            steps_decay = step // args.decay_freq
+            return 1 / args.decay_factor ** steps_decay
+
+    trunk_scheduler = torch.optim.lr_scheduler.LambdaLR(trunk_optimizer, lr_func)
+    model_scheduler = torch.optim.lr_scheduler.LambdaLR(model_optimizer, lr_func)
+    schedulers = {"trunk_scheduler": trunk_scheduler, "model_scheduler": model_scheduler}
+
     best_dev_eer = 1.0
     i_epoch = 0
     def end_of_epoch_hook(trainer):
@@ -124,6 +135,10 @@ def train_eval(args, train_data, dev_data):
 
         i_epoch += 1
 
+    def end_of_iteration_hook(trainer):
+        for scheduler in schedulers.values():
+            scheduler.step()
+
     trainer = trainers.MetricLossOnly(
         models = {"trunk": trunk, "embedder": model},
         optimizers = {
@@ -139,8 +154,9 @@ def train_eval(args, train_data, dev_data):
         loss_weights = None,
         sampler = train_sampler,
         collate_fn = collate_fn,
-        lr_schedulers = None, #TODO: use warm-up,
+        lr_schedulers = None,
         end_of_epoch_hook = end_of_epoch_hook,
+        end_of_iteration_hook=end_of_iteration_hook,
         dataloader_num_workers=1
     )
 
@@ -176,6 +192,10 @@ if __name__=="__main__":
     group.add_argument("--lr", type=float, default=0.01)
     group.add_argument("--decay", type=float, default=0.0)
     group.add_argument("--momentum", type=float, default=0.9)
+
+    group.add_argument("--warmup", type=int, default=700)
+    group.add_argument("--decay-freq", type=int, default=3000)
+    group.add_argument("--decay-factor", type=int, default=2)
 
     group.add_argument("--n-max-per-char", type=int, default=7)
     group.add_argument("--n-batch-size", type=int, default=70)
