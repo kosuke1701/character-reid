@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 import glob
 import json
 import logging
@@ -89,6 +90,21 @@ class PairDataset(Dataset):
 ##
 ## For re-identification dataset
 ##
+
+def remove_duplicate_images(data):
+    data = deepcopy(data)
+
+    img_chars = defaultdict(list)
+    for char_pos, (i_char, lst_i_img) in enumerate(data):
+        for i_img in lst_i_img:
+            img_chars[i_img].append(char_pos)
+
+    for i_img, lst_pos in img_chars.items():
+        if len(lst_pos) > 1:
+            for pos in lst_pos:
+                data[pos][1].remove(i_img)
+
+    return data
 
 def _create_index_image_map(root):
     lst_image_fn = glob.glob(f"{root}/*")
