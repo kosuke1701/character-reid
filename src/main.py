@@ -82,6 +82,17 @@ def train_eval(args, train_data, dev_data):
     )
     model.to(device)
 
+    if args.metric_loss == "triplet":
+        loss_func = losses.TripletMarginLoss(
+            margin=args.margin, normalize_embeddings=args.normalize
+        )
+    elif args.metric_loss == "arcface":
+        loss_func = losses.ArcFaceLoss(
+            margin = args.margin,
+            num_classes=len(train_data),
+            embedding_size=args.emb_dim
+        )
+
     if args.optimizer == "SGD":
         trunk_optimizer = torch.optim.SGD(
             trunk.parameters(),
@@ -93,12 +104,18 @@ def train_eval(args, train_data, dev_data):
             lr = args.lr, momentum = args.momentum,
             weight_decay = args.decay
         )
+        optimizers = {
+            "trunk_optimizer": trunk_optimizer,
+            "embedder_optimizer": model_optimizer
+        }
+        if args.metric_loss == "arcface":
+            loss_optimizer = torch.optim.SGD(
+                loss_func.parameters(), lr=args.lr, momentum=args.momentum,
+                weight_decay = args.decay
+            )
+            optimizers["loss_optimizer"] = loss_optimizer
     else:
         raise NotImplementedError
-
-    loss_func = losses.TripletMarginLoss(
-        margin=args.margin, normalize_embeddings=args.normalize
-    )
 
     def lr_func(step):
         if step < args.warmup:
@@ -141,10 +158,7 @@ def train_eval(args, train_data, dev_data):
 
     trainer = trainers.MetricLossOnly(
         models = {"trunk": trunk, "embedder": model},
-        optimizers = {
-            "trunk_optimizer": trunk_optimizer,
-            "embedder_optimizer": model_optimizer
-        },
+        optimizers = optimizers,
         batch_size = None,
         loss_funcs = {"metric_loss": loss_func},
         mining_funcs = {},
@@ -179,6 +193,7 @@ if __name__=="__main__":
     group.add_argument("--normalize", action="store_true")
     group.add_argument("--dropout", type=float, default=0.0)
 
+    group.add_argument("--metric-loss", choices=["triplet", "arcface"])
     group.add_argument("--margin", type=float, default=0.1)
 
     group.add_argument("--miner", type=str,
