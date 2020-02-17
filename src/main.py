@@ -17,7 +17,7 @@ from pytorch_metric_learning import losses, miners, trainers
 import pytorch_metric_learning.utils.common_functions
 
 from util import create_dataset, MetricBatchSampler, collate_fn, \
-    prepare_evaluation_dataloaders, evaluate
+    prepare_evaluation_dataloaders, evaluate, remove_duplicate_images
 from model import Identity, Normalize
 
 # Override library function to use batch_sampler
@@ -92,6 +92,7 @@ def train_eval(args, train_data, dev_data):
             num_classes=len(train_data),
             embedding_size=args.emb_dim
         )
+        loss_func.to(device)
 
     if args.optimizer == "SGD":
         trunk_optimizer = torch.optim.SGD(
@@ -128,6 +129,13 @@ def train_eval(args, train_data, dev_data):
     model_scheduler = torch.optim.lr_scheduler.LambdaLR(model_optimizer, lr_func)
     schedulers = {"trunk_scheduler": trunk_scheduler, "model_scheduler": model_scheduler}
 
+    if args.miner == "none":
+        mining_funcs = {}
+    elif args.miner == "batch-hard":
+        mining_funcs = {
+            "post_gradient_miner": miners.BatchHardMiner(use_similarity=True)
+        }
+
     best_dev_eer = 1.0
     i_epoch = 0
     def end_of_epoch_hook(trainer):
@@ -161,7 +169,7 @@ def train_eval(args, train_data, dev_data):
         optimizers = optimizers,
         batch_size = None,
         loss_funcs = {"metric_loss": loss_func},
-        mining_funcs = {},
+        mining_funcs = mining_funcs,
         iterations_per_epoch = n_batch,
         dataset = train_dataset,
         data_device = None,
@@ -187,17 +195,18 @@ if __name__=="__main__":
     group = parser.add_argument_group("Dataset arguments")
     group.add_argument("--dataset", type=str)
     group.add_argument("--root", type=str)
+    group.add_argument("--remove-dup", action="store_true")
 
     group = parser.add_argument_group("Model arguments")
     group.add_argument("--emb-dim", type=int, default=500)
     group.add_argument("--normalize", action="store_true")
     group.add_argument("--dropout", type=float, default=0.0)
 
-    group.add_argument("--metric-loss", choices=["triplet", "arcface"])
+    group.add_argument("--metric-loss", choices=["triplet", "arcface"], default="triplet")
     group.add_argument("--margin", type=float, default=0.1)
 
     group.add_argument("--miner", type=str,
-        choices=["none", "batch-hard", "triplet-margin"], default="none")
+        choices=["none", "batch-hard"], default="none")
     group.add_argument("--type-of-triplets", type=str,
         choices=["all", "hard", "semihard"], default="all")
 
@@ -242,7 +251,10 @@ if __name__=="__main__":
     n_split = len(data)
 
     #
-    best_eval = train_eval(args, sum(data[0:2],[]), data[3])
+    train_data = sum(data[0:3],[])
+    if args.remove_dup:
+        train_data = remove_duplicate_images(train_data)
+    best_eval = train_eval(args, train_data, data[3])
 
     logger.info(f"Best evaluation result: {best_eval}")
     with open("_tmp.log", "a") as h:

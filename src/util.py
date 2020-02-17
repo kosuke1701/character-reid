@@ -128,7 +128,7 @@ def create_dataset(root, data, transform):
     char_idx = defaultdict(list)
     lst_fn = []
     lst_label = []
-    for i_char, lst_img_idx in data:
+    for i_char, (_, lst_img_idx) in enumerate(data):
         for img_idx in lst_img_idx:
             data_idx = len(lst_fn)
 
