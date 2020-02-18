@@ -284,11 +284,14 @@ def evaluate(args, trunk, embedder, dataloaders):
 
                 tmp = []
                 for j in range(len(embeddings)):
-                    sim = torch.sum(
-                        embeddings[i].unsqueeze(1) * \
-                        embeddings[j].unsqueeze(0),
-                        dim = 2
-                    )
+                    # sim = torch.sum(
+                    #     embeddings[i].unsqueeze(1) * \
+                    #     embeddings[j].unsqueeze(0),
+                    #     dim = 2
+                    # )
+                    sim = - torch.norm(embeddings[i].unsqueeze(1) \
+                        - embeddings[j].unsqueeze(0),
+                        dim=2)
                     tmp.append(sim)
 
                 row = np.array(torch.cat(tmp, dim=1).tolist(), dtype=np.float32)

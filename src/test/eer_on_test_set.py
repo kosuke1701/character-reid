@@ -28,7 +28,8 @@ def evaluate(models, dataloader, device):
         for data1, data2, label in tqdm(iter(dataloader), leave=False, total=len(dataloader)):
             emb1 = models["embedder"](models["trunk"](data1.to(device)))
             emb2 = models["embedder"](models["trunk"](data2.to(device)))
-            sim = torch.sum(emb1 * emb2, dim=1)
+            #sim = torch.sum(emb1 * emb2, dim=1)
+            sim = - torch.norm(emb1 - emb2, dim=1)
 
             y_score += sim.tolist()
             y_label += label.tolist()

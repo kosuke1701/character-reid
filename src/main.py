@@ -84,7 +84,8 @@ def train_eval(args, train_data, dev_data):
 
     if args.metric_loss == "triplet":
         loss_func = losses.TripletMarginLoss(
-            margin=args.margin, normalize_embeddings=args.normalize
+            margin=args.margin, normalize_embeddings=args.normalize,
+            smooth_loss=args.smooth
         )
     elif args.metric_loss == "arcface":
         loss_func = losses.ArcFaceLoss(
@@ -204,6 +205,7 @@ if __name__=="__main__":
 
     group.add_argument("--metric-loss", choices=["triplet", "arcface"], default="triplet")
     group.add_argument("--margin", type=float, default=0.1)
+    group.add_argument("--smooth", action="store_true")
 
     group.add_argument("--miner", type=str,
         choices=["none", "batch-hard"], default="none")

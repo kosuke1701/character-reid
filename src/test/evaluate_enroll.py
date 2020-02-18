@@ -79,7 +79,8 @@ def evaluate(models, dataset, enrolls, targets, s_batch=200, mode="Any"):
             scores_target = []
             labels_target = []
             for true_ind, emb in enumerate(emb_targets):
-                scores = torch.sum(mean_emb_enroll.unsqueeze(0) * emb.unsqueeze(1), dim=2)
+                #scores = torch.sum(mean_emb_enroll.unsqueeze(0) * emb.unsqueeze(1), dim=2)
+                scores = - torch.norm(mean_emb_enroll.unsqueeze(0) - emb.unsqueeze(1), dim=2)
                 # i_target x i_enroll
                 max_scores, max_ind = torch.max(scores, dim=1)
 
@@ -106,7 +107,8 @@ def evaluate(models, dataset, enrolls, targets, s_batch=200, mode="Any"):
                 # emb: i_target x dim
                 lst_scores = []
                 for i in range(mean_emb_enroll.size(1)):
-                    scores = torch.sum(mean_emb_enroll[:,i,:] * emb.unsqueeze(1), dim=2)
+                    #scores = torch.sum(mean_emb_enroll[:,i,:] * emb.unsqueeze(1), dim=2)
+                    scores = - torch.norm(mean_emb_enroll[:,i,:] - emb.unsqueeze(1), dim=2)
                     lst_scores.append(scores.unsqueeze(2))
                 scores = torch.cat(lst_scores, dim=2)
                 # i_target x i_char x i_enroll
