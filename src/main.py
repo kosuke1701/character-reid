@@ -116,6 +116,27 @@ def train_eval(args, train_data, dev_data):
                 weight_decay = args.decay
             )
             optimizers["loss_optimizer"] = loss_optimizer
+    elif args.optimizer == "Adam":
+        trunk_optimizer = torch.optim.Adam(
+            trunk.parameters(),
+            lr = args.lr,
+            weight_decay = args.decay
+        )
+        model_optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr = args.lr,
+            weight_decay = args.decay
+        )
+        optimizers = {
+            "trunk_optimizer": trunk_optimizer,
+            "embedder_optimizer": model_optimizer
+        }
+        if args.metric_loss == "arcface":
+            loss_optimizer = torch.optim.Adam(
+                loss_func.parameters(), lr=args.lr,
+                weight_decay = args.decay
+            )
+            optimizers["loss_optimizer"] = loss_optimizer
     else:
         raise NotImplementedError
 
