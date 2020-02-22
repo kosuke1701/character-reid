@@ -10,6 +10,9 @@ from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib import cm
 
 import numpy as np
+import warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings('error')
 
 from scipy.interpolate import interp1d
 
@@ -23,6 +26,7 @@ from torchvision import models, transforms
 from tqdm import tqdm
 
 from model import *
+from main import create_models
 from util import calculate_eer, create_dataset, remove_duplicate_images
 
 def split_enroll_target(char_idx, n_enroll=10, min_nimg=20):
@@ -123,30 +127,44 @@ def evaluate(models, dataset, enrolls, targets, s_batch=200, mode="Any"):
 
     # Compute Top1 metrics
     global_top1 = np.mean(sum(labels_target, []))
-    mean_top1 = np.mean([np.mean(labels) for labels in labels_target])
+    mean_top1 = np.mean([np.mean(local_labels) for local_labels in labels_target])
 
     print(f"Global Top1: {global_top1:.4f}")
     print(f"Mean Top1: {mean_top1:.4f}")
 
+
     # Compute precision recalls.
     prc, rcl, thr = precision_recall_curve(sum(labels_target, []), sum(scores_target, []))
-    prc = [np.mean(labels)] + prc.tolist() + [1.0]
-    rcl = [1] + rcl.tolist() + [0.0]
-    thr = [-1.0] + thr.tolist() + [1.0]
-    global_pr = (prc, rcl, thr)
+    global_pr = (prc.tolist(), rcl.tolist(), thr.tolist())
 
     local_prs = []
-    for scores, labels in zip(scores_target, labels_target):
-        prc, rcl, thr = precision_recall_curve(
-            labels, scores
-        )
-        prc = [np.mean(labels)] + prc.tolist() + [1.0]
-        rcl = [1] + rcl.tolist() + [0.0]
-        thr = [-1.0] + thr.tolist() + [1.0]
-        local_prs.append((prc, rcl, thr))
+    for scores, local_labels in zip(scores_target, labels_target):
+        try:
+            prc, rcl, thr = precision_recall_curve(
+                local_labels, scores
+            )
+        except RuntimeWarning:
+            print(local_labels)
+        else:
+            local_prs.append((prc.tolist(), rcl.tolist(), thr.tolist()))
 
     min_thr = min(*list(map(np.min, [global_pr[2]] + list(map(lambda x:x[2], local_prs)))))
     max_thr = max(*list(map(np.max, [global_pr[2]] + list(map(lambda x:x[2], local_prs)))))
+
+    # Add extreme case.
+    prc, rcl, thr = global_pr
+    prc = [np.mean(sum(labels_target, []))] + prc + [1.0]
+    rcl = [1] + rcl + [0.0]
+    thr = [min_thr-1] + thr + [max_thr+1]
+    global_pr = (prc, rcl, thr)
+
+    for i_local, local_labels in zip(range(len(local_prs)), labels_target):
+        prc, rcl, thr = local_prs[i_local]
+        prc = [np.mean(local_labels)] + prc + [1.0]
+        rcl = [1] + rcl + [0.0]
+        thr = [min_thr-1] + thr + [max_thr+1]
+        local_prs[i_local] = (prc, rcl, thr)
+
 
     global_prc = interp1d(global_pr[2], global_pr[0][:-1], kind="previous", fill_value=global_top1)
     global_rcl = interp1d(global_pr[2], global_pr[1][:-1], kind="next", fill_value=0.0)
@@ -221,9 +239,12 @@ if __name__=="__main__":
     # Load model
     device = "cpu" if args.gpu < 0 else "cuda:{}".format(args.gpu)
 
-    models = torch.load(args.model_fn, map_location="cpu")
-    for model in models.values():
-        model.to(device)
+    saved_models = torch.load(args.model_fn, map_location="cpu")
+    trunk, model = create_models(*saved_models["args"])
+    models = {"trunk": trunk, "embedder": model}
+    for key in models.keys():
+        models[key].load_state_dict(saved_models[key])
+        models[key].to(device)
 
     colormap = plt.get_cmap("hsv")
     plots = []
@@ -240,6 +261,8 @@ if __name__=="__main__":
     plt.grid()
     plt.legend(plots, list(map(str, args.n_enroll)),
     handler_map={tuple: HandlerTuple(ndivide=None)})
+
+    plt.ylim([-0.1, 1.1])
 
     plt.xlabel("recall")
     plt.ylabel("precision")

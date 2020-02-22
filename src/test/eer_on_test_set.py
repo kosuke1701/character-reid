@@ -16,6 +16,7 @@ from torchvision import models, transforms
 from tqdm import tqdm
 
 from model import *
+from main import create_models
 from util import calculate_eer, create_dataset, PairDataset
 
 def evaluate(models, dataloader, device):
@@ -85,9 +86,12 @@ if __name__=="__main__":
     # Load model
     device = "cpu" if args.gpu < 0 else "cuda:{}".format(args.gpu)
 
-    models = torch.load(args.model_fn, map_location="cpu")
-    for model in models.values():
-        model.to(device)
+    saved_models = torch.load(args.model_fn, map_location="cpu")
+    trunk, model = create_models(*saved_models["args"])
+    models = {"trunk": trunk, "embedder": model}
+    for key in models.keys():
+        models[key].load_state_dict(saved_models[key])
+        models[key].to(device)
 
     # Compute EER
     def create_pair_uniform(char_idx, n_pair_cls=1000, seed=1234):

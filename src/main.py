@@ -20,6 +20,19 @@ from util import create_dataset, MetricBatchSampler, collate_fn, \
     prepare_evaluation_dataloaders, evaluate, remove_duplicate_images
 from model import Identity, Normalize
 
+def create_models(emb_dim, dropout=0.0):
+    trunk = models.resnet18(pretrained=True)
+    trunk_output_size = trunk.fc.in_features
+    trunk.fc = Identity()
+
+    model = nn.Sequential(
+        nn.Dropout(p=dropout) if dropout > 0.0 else Identity(),
+        nn.Linear(trunk_output_size, emb_dim),
+        Normalize()
+    )
+
+    return trunk, model
+
 # Override library function to use batch_sampler
 def get_train_dataloader(dataset, batch_size, sampler, num_workers, collate_fn):
     return torch.utils.data.DataLoader(
@@ -70,16 +83,8 @@ def train_eval(args, train_data, dev_data):
     # Construct model & optimizer
     device = "cpu" if args.gpu < 0 else "cuda:{}".format(args.gpu)
 
-    trunk = models.resnet18(pretrained=True)
-    trunk_output_size = trunk.fc.in_features
-    trunk.fc = Identity()
+    trunk, model = create_models(args.emb_dim, args.dropout)
     trunk.to(device)
-
-    model = nn.Sequential(
-        nn.Dropout(p=args.dropout) if args.dropout > 0.0 else Identity(),
-        nn.Linear(trunk_output_size, args.emb_dim),
-        Normalize()
-    )
     model.to(device)
 
     if args.metric_loss == "triplet":
@@ -207,7 +212,12 @@ def train_eval(args, train_data, dev_data):
     trainer.train(num_epochs=args.epoch)
 
     if args.save_model:
-        torch.save(trainer.models, f"model/{args.suffix}.mdl")
+        save_models = {
+            "trunk": trainer.models["trunk"].state_dict(),
+            "embedder": trainer.models["embedder"].state_dict(),
+            "args": [args.emb_dim]
+        }
+        torch.save(save_models, f"model/{args.suffix}.mdl")
 
     return best_dev_eer
 
