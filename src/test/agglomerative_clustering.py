@@ -104,7 +104,7 @@ if __name__=="__main__":
     n_img = len(test_dataset)
 
     labels = test_dataset.lst_label
-    old2new = {i_new: i_old for i_new, i_old in enumerate(set(labels))}
+    old2new = {i_old: i_new for i_new, i_old in enumerate(set(labels))}
     labels = [old2new[_] for _ in labels] # img2char
     char2samples = [[] for _ in range(len(set(labels)))] # char2img
     for i_img, label in enumerate(labels):
@@ -130,7 +130,7 @@ if __name__=="__main__":
 
     print("Computing distance matrix...")
     n_batch = int(np.ceil(n_img / s_batch))
-    progress = tqdm(total=n_batch*(n_batch-1)//2)
+    progress = tqdm(total=n_batch*(n_batch-1)//2+n_batch)
     for i_img in range(0, n_img, s_batch):
         for j_img in range(0, i_img+s_batch, s_batch):# We assume symmetric distance.
             lst_img1 = [test_dataset[_] for _ in range(i_img, min(i_img+s_batch, n_img))]
@@ -182,12 +182,15 @@ if __name__=="__main__":
     current_clusters = {i_img: [i_img] for i_img in range(n_img)}
     result = [evaluate_clusters(current_clusters)]
     steps = [0]
+    progress = tqdm(total=depth)
     for i_step, (cls1, cls2) in enumerate(cls_model.children_):
         current_clusters[n_img + i_step] = current_clusters[cls1] + current_clusters[cls2]
         del current_clusters[cls1], current_clusters[cls2]
         if (i_step+1) % max(depth//100,1) == 0:
             result.append(evaluate_clusters(current_clusters))
             steps.append(i_step+1)
+        progress.update()
+    progress.close()
     result = np.array(result)
 
     # Macro precision & recall
