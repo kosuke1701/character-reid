@@ -1,5 +1,7 @@
 # Character Re-identification
 
+This project contains tools and experimental codes to identify characters depicted in illustrations.
+
 ## Dependency
 
 Codes in this repository are developed for Python 3 and uses following libraries:
@@ -13,11 +15,13 @@ Codes in this repository are developed for Python 3 and uses following libraries
 * pytorch-metric-learning
   - https://github.com/KevinMusgrave/pytorch-metric-learning
 
-## Trained models
+# Getting Started
 
-Trained models can be downloaded from [this Google drive link](https://drive.google.com/open?id=1KQziuxDo35ziMz9LGUHm3bCd0LxyB1_-).
+Currently only CUI tool is available.
 
-## CUI Tool
+Trained models used by the tool can be downloaded from [this Google drive link](https://drive.google.com/open?id=1KQziuxDo35ziMz9LGUHm3bCd0LxyB1_-).
+
+### CUI Tool
 
 You can test trained models by running following command in `app` directory.
 
@@ -35,7 +39,7 @@ Currently available command is:
   - Additional option:
     - `--files <image filepath 1> <image filepath 2>`
 
-## Plugins
+### Plugins
 
 Currently following plugins are available:
 
