@@ -17,7 +17,7 @@ class SingleImageEncoder(AbstractModel):
     def encode(self, image_set):
         model = self.get_model()
         model.eval()
-
+        
         emb = model(image_set.to(self.device))
 
         return emb
