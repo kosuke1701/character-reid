@@ -33,6 +33,7 @@ class Res18SingleEncoder(SingleImageEncoder):
         self.model.load_state_dict(saved_models["embedder"])
 
         self.comp_model = nn.Sequential(self.trunk, self.model)
+        self.comp_model.to(device)
     
     def get_model(self):
         return self.comp_model
