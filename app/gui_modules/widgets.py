@@ -2,9 +2,12 @@ from collections import namedtuple
 import os
 import sys
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QPushButton, QLabel,\
-    QComboBox, QFileDialog, QMessageBox, QDialog
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, \
+    QLabel, QComboBox, QFileDialog, QMessageBox, QDialog, QTableWidget, QTableWidgetItem, \
+    QApplication
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+
 
 def start_app(controller):
     app = QApplication(sys.argv)
@@ -98,9 +101,153 @@ class MainWidget(QWidget):
         ##
         self.setLayout(layout)
 
-class IdentificationWidget(QWidget):
-    def __init__(self, parent):
+class IdentificationWidget(object):
+    @classmethod
+    def init_view(cls, parent_view, controller):
+        view = cls(parent_view, controller)
+        view.show()
+        return view
+
+    def __init__(self, parent, controller):
+        self.controller = controller
+
+        # GUI
         self.w = QDialog(parent)
+
+        self.w.setWindowTitle("Setup window for identification mode")
+
+        # Top HBoxLayout
+        hbox_layout = QHBoxLayout(self.w)
+        btn_vbox_layout = QVBoxLayout(self.w)
+        table_group = QGroupBox("Directories of character references", self.w)
+
+        hbox_layout.addLayout(btn_vbox_layout)
+        hbox_layout.addWidget(table_group)
+
+        # Buttons
+        btn_load = QPushButton("Load JSON", self.w)
+        btn_save = QPushButton("Save JSON", self.w)
+        btn_save.clicked.connect(self._save_button)
+        btn_run = QPushButton("Run identification", self.w)
+
+        btn_vbox_layout.addWidget(btn_load)
+        btn_vbox_layout.addWidget(btn_save)
+        btn_vbox_layout.addWidget(btn_run)
+
+        # Directory group
+        table_group_layout = QVBoxLayout(table_group)
+
+        table_btn_layout = QHBoxLayout(table_group)
+
+        btn_table_add = QPushButton("Add new character", table_group)
+        btn_table_add.clicked.connect(self._add_character_row)
+        btn_table_delete = QPushButton("Delete selected characters", table_group)
+        btn_table_delete.clicked.connect(self._delete_button_clicked)
+
+        table_btn_layout.addWidget(btn_table_add)
+        table_btn_layout.addWidget(btn_table_delete)
+
+        table_group_layout.addLayout(table_btn_layout)
+
+        self.table = QTableWidget(table_group)
+        self.char_dir_lst = []
+        self._init_table(self.char_dir_lst)
+
+        self.table.itemClicked.connect(self._item_clicked)
+        self.table.itemChanged.connect(self._item_changed)
+
+        table_group_layout.addWidget(self.table)
     
     def show(self):
-        self.w.exec_()
+        self.w.show()
+    
+    def sync_table(self, char_dir_lst):
+        self.char_dir_lst = char_dir_lst
+        self._init_table(self.char_dir_lst)
+
+    # Button
+    def _save_button(self):
+        print(self.char_dir_lst)
+    
+    # Button
+    def _add_character_row(self):
+        self.char_dir_lst.append(["",""])
+        self.table.insertRow(len(self.char_dir_lst))
+        self._add_table_row(len(self.char_dir_lst), "", "")
+
+    # Button
+    def _delete_button_clicked(self):
+        rows = list(set([idx.row() for idx in self.table.selectedIndexes()]))
+        self._delete_character_rows(rows)
+    
+    # Table
+    def _item_clicked(self, item):
+        idx = self.table.indexFromItem(item)
+        if (idx.row() > 0) and (idx.column() == 1):
+            path = QFileDialog.getExistingDirectory(None,
+                "Choose a directory which contains character reference images", 
+                os.path.dirname(__file__))
+            if len(path) == 0: # No file selected.
+                return
+            else:
+                item.setText(path)
+                self.char_dir_lst[idx.row()-1][1] = path
+
+                self._updated_table()
+    
+    # Table
+    def _item_changed(self, item):
+        idx = self.table.indexFromItem(item)
+        if (idx.row() > 0) and (idx.column() == 0):
+            self.char_dir_lst[idx.row()-1][0] = item.text()
+            self._updated_table()
+    
+    # Table manipulation
+    def _updated_table(self):
+        self.table.resizeRowsToContents()
+        self.table.resizeColumnsToContents()
+
+        self.controller.update_char_dir_lst(self.char_dir_lst)
+
+    def _delete_character_rows(self, index_rows):
+        index_rows = sorted(index_rows, reverse=True)
+        for idx in index_rows:
+            self.char_dir_lst.pop(idx-1)
+            self.table.removeRow(idx)
+
+        self._updated_table()
+    
+    def _add_table_row(self, i_row, char, dirname):
+        item = QTableWidgetItem(char)
+        self.table.setItem(i_row, 0, item)
+        item = QTableWidgetItem(dirname)
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable) # not editable
+        self.table.setItem(i_row, 1, item)
+
+        self._updated_table()
+
+    def _init_table(self, char_dir_lst):
+        self.table.setColumnCount(2)
+        self.table.setRowCount(len(self.char_dir_lst)+1)
+
+        # headers
+        bold_font = QFont()
+        bold_font.setBold(True)
+
+        item = QTableWidgetItem("Character")
+        item.setFlags(Qt.ItemIsEnabled)
+        item.setFont(bold_font)
+        self.table.setItem(0, 0, item)
+
+        item = QTableWidgetItem("Directory of reference images")
+        item.setFlags(Qt.ItemIsEnabled)
+        item.setFont(bold_font)
+        self.table.setItem(0, 1, item)
+
+        # Contents
+        for i_char, (char, dirname) in enumerate(char_dir_lst):
+            self._add_table_row(i_char+1, char, dirname)
+
+        self._updated_table()
+        
+    

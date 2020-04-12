@@ -4,7 +4,7 @@ import sys
 
 import torch
 
-from .widgets import MainWidget, start_app
+from .widgets import MainWidget, start_app, IdentificationWidget
 
 class Controller(object):
     def __init__(self):
@@ -51,4 +51,28 @@ class Controller(object):
             )
         self.module = self.plugin.MainModule(device=self.device)
 
+        Identification_Controller(self.module, self, view)
+
         print("IDENTIFICATIOn")
+
+class Identification_Controller(object):
+    def __init__(self, module, parent_controller, parent_view):
+        self.parent = parent_controller
+        self.module = module
+
+        self.char_dir_lst = []
+
+        self.view = IdentificationWidget.init_view(parent_view, self)
+    
+    def update_char_dir_lst(self, new_lst):
+        self.char_dir_lst = new_lst
+    
+    def save_json(self, path):
+        # Implement me!
+        pass
+
+    def load_json(self, path):
+        # Implement me!!
+        self.view.sync_table(self.char_dir_lst)
+
+    
