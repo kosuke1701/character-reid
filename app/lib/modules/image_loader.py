@@ -1,5 +1,7 @@
 from PIL import Image
 
+import numpy as np
+
 import torch
 from torchvision import transforms
 
@@ -19,6 +21,31 @@ class AbstractImageLoader(object):
 class FullImageLoader(AbstractImageLoader):
     def __init__(self, transform):
         self.transform = transform
+    
+    def load_thumbnail(self, lst_filenames, size, callback=None):
+        imgs = []
+        for i_fn, fn in enumerate(lst_filenames):
+            img = Image.open(fn)
+            img = img.convert("RGBA")
+
+            W,H = img.size
+            if W > H:
+                _img = Image.new(img.mode, (W, W))
+                _img.paste(img, (0, (W-H)//2))
+            elif H > W:
+                _img = Image.new(img.mode, (H, H))
+                _img.paste(img, ((H-W)//2, 0))
+            else:
+                _img = img
+            img = np.array(_img.resize((size, size)))
+
+            assert img.shape[2] == 4
+            img = np.concatenate([img[:,:,3:], img[:,:,:3]], axis=2)
+            imgs.append(img)
+
+            if callback is not None:
+                callback(i_fn, len(lst_filenames))
+        return imgs
 
     def load_images(self, lst_filenames):
         imgs = [_load_image(fn) for fn in lst_filenames]

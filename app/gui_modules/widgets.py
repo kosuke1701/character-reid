@@ -4,8 +4,8 @@ import sys
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, \
     QLabel, QComboBox, QFileDialog, QMessageBox, QDialog, QTableWidget, QTableWidgetItem, \
-    QApplication
-from PyQt5.QtCore import Qt
+    QApplication, QProgressBar
+from PyQt5.QtCore import Qt, pyqtSignal, QThread
 from PyQt5.QtGui import QFont
 
 
@@ -126,12 +126,19 @@ class IdentificationWidget(object):
 
         # Buttons
         btn_load = QPushButton("Load JSON", self.w)
+        btn_load.clicked.connect(self._load_button)
         btn_save = QPushButton("Save JSON", self.w)
         btn_save.clicked.connect(self._save_button)
+        btn_load_dir = QPushButton("Select image directory", self.w)
+        btn_load_dir.clicked.connect(self._load_image_directory)
+        self.label_load_dir = QLabel("No image directory selected.", self.w)
         btn_run = QPushButton("Run identification", self.w)
+        btn_run.clicked.connect(self._run_button)
 
         btn_vbox_layout.addWidget(btn_load)
         btn_vbox_layout.addWidget(btn_save)
+        btn_vbox_layout.addWidget(btn_load_dir)
+        btn_vbox_layout.addWidget(self.label_load_dir)
         btn_vbox_layout.addWidget(btn_run)
 
         # Directory group
@@ -158,6 +165,9 @@ class IdentificationWidget(object):
 
         table_group_layout.addWidget(self.table)
     
+    def get_view(self):
+        return self.w
+    
     def show(self):
         self.w.show()
     
@@ -166,8 +176,41 @@ class IdentificationWidget(object):
         self._init_table(self.char_dir_lst)
 
     # Button
+    def _run_button(self):
+        self.controller.run()
+    
+    # Button
+    def _load_image_directory(self):
+        path = QFileDialog.getExistingDirectory(None,
+            "Choose a directory which contains source images", 
+            os.path.dirname(__file__))
+        if len(path) == 0: # No file selected.
+            return
+        else:
+            self.controller.register_src_dir(path)
+            self.label_load_dir.setText(path)
+
+
+
+    # Button
+    def _load_button(self):
+        path, _ = QFileDialog.getOpenFileName(None, "Choose config file", 
+            os.path.join(os.path.dirname(__file__), ".."),
+            "JSON file (*.json)")
+        if len(path) == 0: # No file selected.
+            return
+        
+        self.controller.load_json(path)
+
+    # Button
     def _save_button(self):
-        print(self.char_dir_lst)
+        path, _ = QFileDialog.getSaveFileName(None, "Save config file",
+            os.path.join(os.path.dirname(__file__), ".."),
+            "JSON file (*.json)")
+        if len(path) == 0:
+            return
+        
+        self.controller.save_json(path)
     
     # Button
     def _add_character_row(self):
@@ -249,5 +292,53 @@ class IdentificationWidget(object):
             self._add_table_row(i_char+1, char, dirname)
 
         self._updated_table()
-        
     
+    def show_error_dialog(self, title, message):
+        QMessageBox.about(self.w, title, message)
+        
+class ProgressBarWidget(object):
+    class Thread(QThread):
+        str_signal = pyqtSignal(str)
+        int_signal = pyqtSignal(int)
+        def __init__(self, finish_func):
+            super().__init__()
+            self.finished.connect(finish_func)
+        def _run(self):
+            raise NotImplementedError()
+        def run(self):
+            print("kiee2")
+            self._run()
+        def update_str(self, txt):
+            self.str_signal.emit(txt)
+        def update_int(self, val):
+            if not isinstance(val, int):
+                val = int(val)
+            self.int_signal.emit(val)
+    
+    def __init__(self, parent_view):
+        self.w = QDialog(parent_view)
+
+        self.w.setWindowTitle("Preprocessing...")
+
+        vbox_layout = QVBoxLayout(self.w)
+
+        self.label = QLabel("", self.w)
+
+        self.bar = QProgressBar(self.w)
+        self.bar.setGeometry(0, 0, 300, 25)
+        self.bar.setMaximum(100)
+
+        vbox_layout.addWidget(self.label)
+        vbox_layout.addWidget(self.bar)
+
+        self.w.setLayout(vbox_layout)
+    
+    def register_thread(self, thread):
+        thread.str_signal.connect(self.label.setText)
+        thread.int_signal.connect(self.bar.setValue)
+        
+    def show(self):
+        self.w.show()
+
+    def close(self):
+        self.w.close()

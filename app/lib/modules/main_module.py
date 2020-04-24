@@ -24,7 +24,10 @@ class AbstractMainModule(object):
         self.encoder = encoder_model
         self.scoring = scoring_model
     
-    def _get_embedding(self, filenames):
+    def _load_thumbnail(self, lst_filenames, size, callback=None):
+        self.loader.load_thumbnail(lst_filenames, size, callback)
+    
+    def _get_embedding(self, filenames, callback=None):
         assert len(filenames) > 0, "No filename is given to _get_embedding()"
         embs = []
         for i_start in range(0, len(filenames), self.bs):
@@ -33,6 +36,8 @@ class AbstractMainModule(object):
             batch_img = self.loader.load_images(batch_fn)
             emb = self.encoder.encode(batch_img)
             embs.append(emb)
+            if callback is not None:
+                callback(i_start, len(filenames))
         if len(embs) > 1:
             embs = self.encoder.concatenate_emb(*embs)
         else:
@@ -74,7 +79,7 @@ class AbstractMainModule(object):
 
         return model.get_range(), model.get_clusters
     
-    def get_identification_result(self, enroll_filenames, target_filenames, mode):
+    def get_identification_result(self, enroll_filenames, target_filenames, mode, callback=None):
         """
         Arguments:
             enroll_filenames (list) -- List of lists of image filenames of each character.
@@ -85,12 +90,43 @@ class AbstractMainModule(object):
                 M target images and N known characters.
         """
         with torch.no_grad():
-            enroll_embs = [self._get_embedding(filenames) for filenames in enroll_filenames]
-            target_embs = self._get_embedding(target_filenames)
+            if callback is not None:
+                total_n_filenames = sum([len(_) for _ in enroll_filenames])
+                last_i_fn = None
+                last_n_fn = None
+                n_processed = 0
+                def _callback(i_fn, n_fn):
+                    nonlocal n_processed, callback, last_i_fn, last_n_fn
+                    if (last_i_fn is None) or (last_i_fn >= i_fn):
+                        if last_n_fn is not None:
+                            n_processed += last_n_fn - last_i_fn
+                        last_i_fn = 0
+                        last_n_fn = n_fn
+                    n_processed += i_fn - last_i_fn
+                    last_i_fn = i_fn
 
-            scores = [self.scoring.compute_score(char_embs, target_embs, "pair") 
-                for char_embs in enroll_embs]
+                    callback(0, n_processed, total_n_filenames)
+            else:
+                _callback = None
+
+            # Embedding enroll images
+            enroll_embs = []
+            for i_fn, filenames in enumerate(enroll_filenames):
+                enroll_embs.append(self._get_embedding(filenames, callback=_callback))
+            if callback is not None:
+                callback(0, len(enroll_filenames)-1, len(enroll_filenames))
+            
+            target_embs = self._get_embedding(target_filenames)
+            if callback is not None:
+                callback(1)
+
+            scores = []
+            for i_char, char_embs in enumerate(enroll_embs):
+                scores.append(self.scoring.compute_score(char_embs, target_embs, "pair"))
+                if callback is not None:
+                    callback(2, i_char, len(enroll_embs))
             scores = id_enroll(scores, mode)
+            callback(3)
         
         return scores
 
