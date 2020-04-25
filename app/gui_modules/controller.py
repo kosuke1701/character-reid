@@ -2,12 +2,15 @@ from importlib import import_module
 import os
 import sys
 
+from collections import defaultdict
+import shutil
 import json
 
+import numpy as np
 import torch
 
-from .widgets import MainWidget, start_app, IdentificationWidget, \
-    ProgressBarWidget
+from .widgets import MainWidget, start_app, IdentificationView, \
+    ProgressBarWidget, IdentificationVisualizeView
 
 class Controller(object):
     def __init__(self):
@@ -64,15 +67,21 @@ class Identification_Controller(object):
         self.module = module
 
         self.char_dir_lst = []
+
         self.image_src_dir = None
         self.filenames = None
         self.src_filenames = None
         self.scores = None
         self.thumbs = None
 
-        self.view = IdentificationWidget.init_view(parent_view, self)
+        self.states = None
+
+        self.parent_view = parent_view
+        self.view = IdentificationView.init_view(parent_view, self)
         self.progress_view = None
+        self.visualize_view = None
     
+    ## Configuration window
     def update_char_dir_lst(self, new_lst):
         self.char_dir_lst = new_lst
     
@@ -88,6 +97,7 @@ class Identification_Controller(object):
     def register_src_dir(self, path):
         self.image_src_dir = path
 
+    ## Preprocessing window
     class PreProcess(ProgressBarWidget.Thread):
         def __init__(self, finish_func, controller):
             super().__init__(finish_func)
@@ -96,7 +106,6 @@ class Identification_Controller(object):
             self.controller._load_filename_list(self)
             self.controller._load_thumbnails(self)
             self.controller._compute_scores(self)
-            self.finished.emit()
     
     def _load_thumbnails(self, thread):
         def callback(i_fn, n_fn):
@@ -145,12 +154,99 @@ class Identification_Controller(object):
         if self.image_src_dir is None:
             self.view.show_error_dialog("Error", "Please select source image directory.")
             return
+        self.view.close()
         self.thread = self.PreProcess(self._start_identification_UI, self)
-        self.progress_view = ProgressBarWidget(self.view.get_view())
+        self.progress_view = ProgressBarWidget(self.parent_view)
         self.progress_view.show()
         self.progress_view.register_thread(self.thread)
         self.thread.start()
 
+    ## Idenfitication window
+    class ItemState(object):
+        def __init__(self, thumb, check, selected_id, char_lst, char_id_lst, 
+            score, filename):
+            self.thumb = thumb
+            self.check = check
+            self.selected_id = selected_id
+            self.char_lst = char_lst # Unsorted. Original.
+            self.char_id_lst = char_id_lst # Sorted
+            self.score = score
+            self.filename = filename
+        def get_char_name_list(self):
+            return [self.char_lst[_] for _ in self.char_id_lst]
+
     def _start_identification_UI(self):
         self.progress_view.close()
-        # TODO: Implement me!!!
+
+        charnames = [_[0] for _ in self.char_dir_lst]
+
+        # Construct state map
+        image_ids = defaultdict(list) # i_char -> list of (score, i_img)
+        sorted_idx = []
+        for i_img in range(self.scores.shape[0]):
+            sorted_i_char = np.argsort(-self.scores[i_img])
+            sorted_idx.append(sorted_i_char.tolist())
+
+            i_char = sorted_i_char[0]
+            image_ids[i_char].append((self.scores[i_img, i_char], i_img))
+        
+        for key in image_ids:
+            image_ids[key] = sorted(image_ids[key], reverse=True)
+        
+        self.states = [[] for _ in range(self.scores.shape[1])]
+        for i_char, sorted_lst in image_ids.items():
+            for score, i_img in sorted_lst:
+                state = self.ItemState(
+                    thumb = self.thumbs[i_img],
+                    check = False,
+                    selected_id = 0,
+                    char_lst = charnames,
+                    char_id_lst = sorted_idx[i_img],
+                    score = score,
+                    filename = self.src_filenames[i_img]
+                )
+                self.states[i_char].append(state)
+        
+        # Initialize view
+        self.visualize_view = IdentificationVisualizeView(
+            self.parent_view, self)
+        self.visualize_view.init_character_list(charnames)
+        self.visualize_view.init_table(0, self.states[0])
+        self.visualize_view.show()
+    
+    def set_check_states(self, i_char, i_img, new_bool):
+        self.states[i_char][i_img].check = new_bool
+    
+    def set_selected_target(self, i_char, i_img, new_idx):
+        self.states[i_char][i_img].selected_id = new_idx
+
+    def show_new_character(self, i_char):
+        self.visualize_view.init_table(i_char, self.states[i_char])
+    
+    def save_selected_images(self, path, delete_source=False):
+        charnames = [_[0] for _ in self.char_dir_lst]
+        for charname in charnames:
+            target_dir = os.path.join(path, charname)
+            if not os.path.exists(target_dir):
+                os.mkdir(target_dir)
+        
+        for i_char, lst_states in enumerate(self.states):
+            for state in lst_states:
+                if state.check:
+                    src_fn = state.filename
+                    src_base_fn = os.path.basename(src_fn)
+                    dest_fn = os.path.join(
+                        path, charnames[i_char], src_base_fn
+                    )
+
+                    if delete_source:
+                        # Move
+                        shutil.move(src_fn, dest_fn)
+                    else:
+                        # Copy
+                        shutil.copy(src_fn, dest_fn)
+        
+        self.visualize_view.show_dialog("Info", "Finished!!")
+        self.visualize_view.close()
+
+            

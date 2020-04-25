@@ -37,11 +37,9 @@ class FullImageLoader(AbstractImageLoader):
                 _img.paste(img, ((H-W)//2, 0))
             else:
                 _img = img
-            img = np.array(_img.resize((size, size)))
-
-            assert img.shape[2] == 4
-            img = np.concatenate([img[:,:,3:], img[:,:,:3]], axis=2)
-            imgs.append(img)
+            _img = _img.resize((size, size))
+            
+            imgs.append(_img)
 
             if callback is not None:
                 callback(i_fn, len(lst_filenames))

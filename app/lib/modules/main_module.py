@@ -25,7 +25,7 @@ class AbstractMainModule(object):
         self.scoring = scoring_model
     
     def _load_thumbnail(self, lst_filenames, size, callback=None):
-        self.loader.load_thumbnail(lst_filenames, size, callback)
+        return self.loader.load_thumbnail(lst_filenames, size, callback)
     
     def _get_embedding(self, filenames, callback=None):
         assert len(filenames) > 0, "No filename is given to _get_embedding()"

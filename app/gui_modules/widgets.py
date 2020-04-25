@@ -1,13 +1,23 @@
 from collections import namedtuple
+from functools import partial
 import os
 import sys
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, \
     QLabel, QComboBox, QFileDialog, QMessageBox, QDialog, QTableWidget, QTableWidgetItem, \
-    QApplication, QProgressBar
-from PyQt5.QtCore import Qt, pyqtSignal, QThread
-from PyQt5.QtGui import QFont
+    QApplication, QProgressBar, QListWidget, QListWidgetItem, QCheckBox, \
+    QAbstractItemView
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, pyqtSlot, QSize
+from PyQt5.QtGui import QFont, QImage, QPixmap
 
+from PIL.ImageQt import ImageQt
+
+class ClickableQLabel(QLabel):
+    clicked = pyqtSignal()
+    def __init__(self, *args):
+        QLabel.__init__(self, *args)
+    def mousePressEvent(self, ev):
+        self.clicked.emit()
 
 def start_app(controller):
     app = QApplication(sys.argv)
@@ -101,7 +111,7 @@ class MainWidget(QWidget):
         ##
         self.setLayout(layout)
 
-class IdentificationWidget(object):
+class IdentificationView(object):
     @classmethod
     def init_view(cls, parent_view, controller):
         view = cls(parent_view, controller)
@@ -170,6 +180,9 @@ class IdentificationWidget(object):
     
     def show(self):
         self.w.show()
+    
+    def close(self):
+        self.w.close()
     
     def sync_table(self, char_dir_lst):
         self.char_dir_lst = char_dir_lst
@@ -303,11 +316,8 @@ class ProgressBarWidget(object):
         def __init__(self, finish_func):
             super().__init__()
             self.finished.connect(finish_func)
-        def _run(self):
-            raise NotImplementedError()
         def run(self):
-            print("kiee2")
-            self._run()
+            raise NotImplementedError()
         def update_str(self, txt):
             self.str_signal.emit(txt)
         def update_int(self, val):
@@ -342,3 +352,134 @@ class ProgressBarWidget(object):
 
     def close(self):
         self.w.close()
+
+class IdentificationVisualizeView(object):
+    def __init__(self, parent_widget, controller):
+        self.controller = controller
+
+        self.cur_i_char = None
+        
+        # GUI
+        self.w = QDialog(parent_widget)
+        self.w.setWindowTitle("Identification result")
+
+        hbox = QHBoxLayout(self.w)
+        # Left panel
+        vbox_1_widget = QWidget()
+        vbox_1 = QVBoxLayout(self.w)
+        vbox_1_widget.setLayout(vbox_1)
+        vbox_1_widget.setFixedWidth(200)
+        hbox.addWidget(vbox_1_widget)
+        ## Done button
+        btn_done = QPushButton("Save images", self.w)
+        btn_done.clicked.connect(self._btn_done)
+        vbox_1.addWidget(btn_done)
+        ## Character selecting list
+        self.char_lst = QListWidget(self.w)
+        self.char_lst.currentRowChanged.connect(self._char_lst_row_changed)
+        vbox_1.addWidget(self.char_lst)
+
+        # Right panel
+        vbox_2 = QVBoxLayout(self.w)
+        hbox.addLayout(vbox_2)
+        # ## Top buttons
+        # hbox_21 = QHBoxLayout(self.w)
+        # vbox_2.addLayout(hbox_21)
+        # ### Check button
+        # btn_check = QPushButton("Check", self.w)
+        # btn_check.clicked.connect(self._btn_check)
+        # hbox_21.addWidget(btn_check)
+        # ### Uncheck button
+        # btn_uncheck = QPushButton("Uncheck", self.w)
+        # btn_uncheck.clicked.connect(self._btn_uncheck)
+        # hbox_21.addWidget(btn_uncheck)
+        ## Image table
+        self.img_table = QTableWidget(self.w)
+        self.img_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.img_table.setSelectionMode(
+            QAbstractItemView.NoSelection
+        )
+        vbox_2.addWidget(self.img_table)
+    
+    # slot
+    def _btn_done(self):
+        path = QFileDialog.getExistingDirectory(None,
+            "Choose a directory to save images.", 
+            os.path.dirname(__file__))
+        if len(path) == 0: # No file selected.
+            return
+        else:
+            ret = QMessageBox.question(self.w, "",
+                "Do you want to move images? [Yes->move images, No->copy images]",
+                QMessageBox.Yes | QMessageBox.No)
+            self.controller.save_selected_images(path, (ret==QMessageBox.Yes))
+
+    def _char_lst_row_changed(self, row_idx):
+        self.controller.show_new_character(row_idx)
+    
+    # public utility
+    def init_character_list(self, lst_char_names):
+        for i_char, charname in enumerate(lst_char_names):
+            item = QListWidgetItem(charname)
+            self.char_lst.insertItem(i_char, item)
+        self.char_lst.setCurrentRow(0)
+    
+    def _checked_func(self, val, i_state):
+        flag = (val > 0)
+        self.controller.set_check_states(self.cur_i_char, i_state, flag)
+    
+    def _select_target(self, val, i_state):
+        self.controller.set_selected_target(self.cur_i_char, i_state, val)
+    
+    def _image_clicked(self, i_state):
+        cbx = self.img_table.cellWidget(i_state, 1)
+        state = cbx.isChecked()
+        cbx.setChecked(state ^ True)
+
+    def init_table(self, new_i_char, state_lst):
+        self.cur_i_char = new_i_char
+
+        self.img_table.clear()
+        self.img_table.setColumnCount(4)
+        self.img_table.setRowCount(len(state_lst))
+
+        for i_state, state in enumerate(state_lst):
+            # Image
+            thumb = state.thumb
+            image = ImageQt(thumb)
+            pixmap = QPixmap.fromImage(image)
+            img_label = ClickableQLabel("",self.img_table)
+            img_label.setPixmap(pixmap)
+            img_label.clicked.connect(partial(self._image_clicked, i_state=i_state))
+            self.img_table.setCellWidget(i_state, 0, img_label)
+
+            # Checkbox
+            cbx = QCheckBox("Save", self.img_table)
+            cbx.setChecked(state.check)
+            cbx.stateChanged.connect(partial(self._checked_func, i_state=i_state))
+            self.img_table.setCellWidget(i_state, 1, cbx)
+
+            # Combobox
+            combo = QComboBox(self.img_table)
+            combo.addItems(state.get_char_name_list())
+            combo.setCurrentIndex(state.selected_id)
+            combo.currentIndexChanged.connect(
+                partial(self._select_target, i_state=i_state)
+            )
+            self.img_table.setCellWidget(i_state, 2, combo)
+
+            # Filename
+            fn_label = QLabel(state.filename, self.img_table)
+            self.img_table.setCellWidget(i_state, 3, fn_label)
+        
+        self.img_table.resizeRowsToContents()
+        self.img_table.resizeColumnsToContents()
+    
+    def show(self):
+        self.w.exec_()
+    
+    def close(self):
+        self.w.close()
+    
+    def show_dialog(self, title, message):
+        QMessageBox.about(self.w, title, message)
