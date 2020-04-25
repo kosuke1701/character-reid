@@ -2,24 +2,44 @@
 
 This project contains tools and experimental codes to identify characters depicted in illustrations.
 
-## Dependency
-
-Codes in this repository are developed for Python 3 and uses following libraries:
-
-* Pillow (PIL)
-* numpy
-* scipy
-* sci-kit learn
-* pytorch
-  - torchvision
-* pytorch-metric-learning
-  - https://github.com/KevinMusgrave/pytorch-metric-learning
+<!-- * pytorch-metric-learning
+  - https://github.com/KevinMusgrave/pytorch-metric-learning -->
 
 ## Getting Started
 
-Currently only CUI tool is available.
+### Prepare Environment
 
-Trained models used by the tool can be downloaded from [this Google drive link](https://drive.google.com/open?id=1KQziuxDo35ziMz9LGUHm3bCd0LxyB1_-).
+1. Install [Anaconda](https://www.anaconda.com/products/individual).
+
+2. Create a new environment and install libraries.
+
+    ```
+    conda create -n CRID python=3.7 numpy=1.18 scikit-learn=0.22 pillow=7.0 -y
+    conda activate CRID
+    conda install -c anaconda pyqt -y
+    ```
+
+3. Install [PyTorch](https://pytorch.org/).
+
+    ```
+    # In case you want to use only CPU.
+    conda install pytorch=1.4 torchvision cpuonly -c pytorch -y
+    ```
+
+4. Prepare plugins.
+
+    Please see [Plugins section](#plugins).
+
+### GUI Tool
+
+You can open GUI window by executing `app/gui_tool.py`.
+
+```
+conda activate CRID
+python app/gui_tool.py
+```
+
+Currently, I'm preparing user manual for GUI tool.
 
 ### CUI Tool
 
@@ -59,4 +79,4 @@ Currently following plugins are available:
 
 * `plugins/res18_single`
   - It uses ResNet18 and one linear projection layer to encode images.
-  - Please download pre-trained model file `res18_0222.mdl` from the Google drive link and place it in `plugins/res18_single` directory.
+  - Please download pre-trained model file `res18_0222.mdl` from [Google drive link](https://drive.google.com/open?id=1KQziuxDo35ziMz9LGUHm3bCd0LxyB1_-) and place it in `plugins/res18_single` directory.

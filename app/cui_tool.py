@@ -66,7 +66,7 @@ if __name__=="__main__":
     parser_sim.add_argument("--files", type=str, nargs=2)
     parser_sim.set_defaults(handler=command_sim)
 
-    parser_enroll = subparsers.add_parser("identify")
+    parser_enroll = subparsers.add_parser("classify")
     parser_enroll.add_argument("--enroll-config-fn", type=str)
     parser_enroll.add_argument("--target-dir", type=str)
     parser_enroll.add_argument("--mode", choices=["Avg", "Max"])
