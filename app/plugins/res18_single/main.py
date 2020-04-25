@@ -16,7 +16,9 @@ class Res18SingleEncoder(SingleImageEncoder):
 
         dropout = 0.0
         emb_dim = 500
-        model_fn = "plugins/res18_single/res18_0222.mdl"
+        model_fn = os.path.join(
+            os.path.dirname(__file__), "res18_0222.mdl"
+        )
 
         self.trunk = models.resnet18(pretrained=True)
         trunk_output_size = self.trunk.fc.in_features
