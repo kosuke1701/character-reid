@@ -19,7 +19,7 @@ class VectorEmbeddingScoringModel(AbstractScoringModel):
             n2 = tensor2.size(0)
 
             # Split larger tensor to reduce peak memory usage.
-            n_chunk = n1 * n2 // self.bs
+            n_chunk = max(n1 * n2 // self.bs, 1)
             if n1 >= n2:
                 chunks = torch.chunk(tensor1, n_chunk, dim=0)
                 sims = []
