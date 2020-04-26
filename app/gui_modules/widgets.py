@@ -6,7 +6,7 @@ import sys
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, \
     QLabel, QComboBox, QFileDialog, QMessageBox, QDialog, QTableWidget, QTableWidgetItem, \
     QApplication, QProgressBar, QListWidget, QListWidgetItem, QCheckBox, \
-    QAbstractItemView
+    QAbstractItemView, QLineEdit
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, pyqtSlot, QSize
 from PyQt5.QtGui import QFont, QImage, QPixmap
 
@@ -145,10 +145,24 @@ class IdentificationView(object):
         btn_run = QPushButton("Run identification", self.w)
         btn_run.clicked.connect(self._run_button)
 
+        # Limit number of enroll images
+        limit_group = QGroupBox("Limit number of reference images:", self.w)
+        limit_group_layout = QVBoxLayout(limit_group)
+        limit_check = QCheckBox("Enable", self.w)
+        limit_check.stateChanged.connect(self._limit_state)
+        limit_edit = QLineEdit(self.w)
+        limit_edit.setText("100")
+        limit_edit.resize(150, 50)
+        limit_edit.textEdited.connect(self._limit_val)
+        limit_group_layout.addWidget(limit_check)
+        limit_group_layout.addWidget(limit_edit)
+        limit_group.setLayout(limit_group_layout)
+
         btn_vbox_layout.addWidget(btn_load)
         btn_vbox_layout.addWidget(btn_save)
         btn_vbox_layout.addWidget(btn_load_dir)
         btn_vbox_layout.addWidget(self.label_load_dir)
+        btn_vbox_layout.addWidget(limit_group)
         btn_vbox_layout.addWidget(btn_run)
 
         # Directory group
@@ -187,6 +201,18 @@ class IdentificationView(object):
     def sync_table(self, char_dir_lst):
         self.char_dir_lst = char_dir_lst
         self._init_table(self.char_dir_lst)
+
+    def _limit_state(self, val):
+        flag = (val > 0)
+        self.controller.set_limit_state(flag)
+    
+    def _limit_val(self, val):
+        try:
+            val = int(val)
+            if val > 0:
+                self.controller.set_limit_number(val)
+        except:
+            pass
 
     # Button
     def _run_button(self):

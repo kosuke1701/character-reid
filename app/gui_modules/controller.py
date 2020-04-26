@@ -5,6 +5,7 @@ import sys
 from collections import defaultdict
 import shutil
 import json
+from random import sample
 
 import numpy as np
 import torch
@@ -67,6 +68,8 @@ class Identification_Controller(object):
         self.module = module
 
         self.char_dir_lst = []
+        self.flag_limit = False
+        self.number_limit = 100
 
         self.image_src_dir = None
         self.filenames = None
@@ -96,6 +99,14 @@ class Identification_Controller(object):
     
     def register_src_dir(self, path):
         self.image_src_dir = path
+    
+    def set_limit_state(self, val):
+        print(f"Limiting state: {val}")
+        self.flag_limit = val
+    
+    def set_limit_number(self, val):
+        print(f"Limiting number: {val}")
+        self.number_limit = val
 
     ## Preprocessing window
     class PreProcess(ProgressBarWidget.Thread):
@@ -125,9 +136,15 @@ class Identification_Controller(object):
             self.filenames.append(lst_fn)
             thread.update_int(int(i_char*100/n_char))
         
+        if self.flag_limit:
+            for i_char, lst_filenames in enumerate(self.filenames):
+                self.filenames[i_char] = \
+                    sample(lst_filenames, min(len(lst_filenames), self.number_limit))
+        
         thread.update_str("Loading source images.")
         thread.update_int(0)
         self.src_filenames = self.module._get_list_of_all_image_files_directory(self.image_src_dir)
+
     
     def _compute_scores(self, thread):
         def callback(*args):
