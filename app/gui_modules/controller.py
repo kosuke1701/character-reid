@@ -252,10 +252,11 @@ class Identification_Controller(object):
         for i_char, lst_states in enumerate(self.states):
             for state in lst_states:
                 if state.check:
+                    to_char = state.char_id_lst[state.selected_id]
                     src_fn = state.filename
                     src_base_fn = os.path.basename(src_fn)
                     dest_fn = os.path.join(
-                        path, charnames[i_char], src_base_fn
+                        path, charnames[to_char], src_base_fn
                     )
 
                     if delete_source:
