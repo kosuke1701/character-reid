@@ -1,4 +1,5 @@
 import configparser
+from functools import partial
 import glob
 import os
 import _pickle as pic
@@ -85,6 +86,11 @@ class AbstractMainModule(object):
             enroll_filenames (list) -- List of lists of image filenames of each character.
             target_filenames (list) -- List of image filenames.
             mode (str) -- "Max" or "Avg"
+            callback (func) -- This function will be called with following arguments:
+                (0, i, n): finished embedding i out of n enroll images,
+                (1, i, n): finished embedding i out of n target images,
+                (2, i, n): finished computing similarity scores for i out of n characters,
+                (3, ): finished computing identification score for all characters.
         Return:
             id_scores - An numpy.ndarray of size (M x N) which contains identification scores between
                 M target images and N known characters.
@@ -95,8 +101,8 @@ class AbstractMainModule(object):
                 last_i_fn = None
                 last_n_fn = None
                 n_processed = 0
-                def _callback(i_fn, n_fn):
-                    nonlocal n_processed, callback, last_i_fn, last_n_fn
+                def _callback(i_fn, n_fn, id):
+                    nonlocal n_processed, callback, last_i_fn, last_n_fn, total_n_filenames
                     if (last_i_fn is None) or (last_i_fn >= i_fn):
                         if last_n_fn is not None:
                             n_processed += last_n_fn - last_i_fn
@@ -105,20 +111,23 @@ class AbstractMainModule(object):
                     n_processed += i_fn - last_i_fn
                     last_i_fn = i_fn
 
-                    callback(0, n_processed, total_n_filenames)
+                    callback(id, n_processed, total_n_filenames)
             else:
                 _callback = None
 
             # Embedding enroll images
             enroll_embs = []
             for i_fn, filenames in enumerate(enroll_filenames):
-                enroll_embs.append(self._get_embedding(filenames, callback=_callback))
+                enroll_embs.append(self._get_embedding(filenames, callback=partial(_callback, id=0)))
             if callback is not None:
                 callback(0, len(enroll_filenames)-1, len(enroll_filenames))
+                last_i_fn = None
+                last_n_fn = None
+                total_n_filenames = len(target_filenames)
             
-            target_embs = self._get_embedding(target_filenames)
+            target_embs = self._get_embedding(target_filenames, callback=partial(_callback, id=1))
             if callback is not None:
-                callback(1)
+                callback(1, len(target_filenames)-1, len(target_filenames))
 
             scores = []
             for i_char, char_embs in enumerate(enroll_embs):

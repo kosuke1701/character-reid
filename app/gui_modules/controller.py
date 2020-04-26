@@ -137,8 +137,10 @@ class Identification_Controller(object):
                     thread.update_str("Computing embeddings of source images.")
                     thread.update_int(0)
             elif args[0] == 1:
-                thread.update_str("Computing scores between images.")
-                thread.update_int(0)
+                thread.update_int(int(args[1]*100/args[2]))
+                if args[1] + 1 == args[2]:
+                    thread.update_str("Computing scores between images.")
+                    thread.update_int(0)
             elif args[0]==2:
                 thread.update_int(int(args[1]*100/args[2]))
                 if args[1] + 1 == args[2]:
