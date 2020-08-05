@@ -59,4 +59,4 @@ new_data = {
 }
 ```
 
-'list_of_face_positions' is a list of bounding box coordinates which are `[x_min, y_min, x_max, y_max]`. (X-axis is horizontal.)
+'list_of_face_positions' is a list of bounding box coordinates which are `[x_min, y_min, x_max, y_max]`. (X-axis is horizontal, and (0,0) is top-left corner.)
